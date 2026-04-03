@@ -1,0 +1,56 @@
+data_ingestion:
+  data_url: "https://raw.githubusercontent.com/vikashishere/Datasets/refs/heads/main/data.csv"
+  test_size: 0.2
+  random_state: 42
+  target_column: "sentiment"
+  text_column: "review"
+  raw_data_dir: "./data/raw"
+
+data_preprocessing:
+  train_data_path: "./data/raw/train.csv"
+  test_data_path: "./data/raw/test.csv"
+  output_dir: "./data/interim"
+  text_column: "review"
+  min_words: 3
+
+feature_engineering:
+  train_data_path: "./data/interim/train_processed.csv"
+  test_data_path: "./data/interim/test_processed.csv"
+  output_dir: "./data/processed"
+  model_dir: "./models"
+  text_column: "review"
+  target_column: "sentiment"
+  max_features: 80
+  ngram_range: [1, 1]
+  min_df: 1
+  apply_variance_threshold: false
+  variance_threshold: 0.0
+  apply_maxabs_scaler: true
+  apply_select_k_best: false
+  select_k_best: 30
+
+data_paths:
+  train_features: "./data/processed/train_bow.csv"
+  test_features: "./data/processed/test_bow.csv"
+
+model_building:
+  target_column: "sentiment"
+  model_name: "LogisticRegression"
+  model_params:
+    C: 1.0
+    penalty: "l2"
+    solver: "liblinear"
+    max_iter: 1000
+
+artifacts:
+  model_dir: "./models"
+  model_path: "./models/model.pkl"
+  metadata_path: "./models/model_metadata.json"
+  metrics_path: "./reports/metrics.json"
+  experiment_info_path: "./reports/experiment_info.json"
+
+mlflow:
+  experiment_name: "Sentiment model Pipeline"
+  use_dagshub: true
+  model_name: "sentiment-classifier"
+  stage: "Staging"
