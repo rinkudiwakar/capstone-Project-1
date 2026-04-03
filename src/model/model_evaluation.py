@@ -35,6 +35,15 @@ DEFAULT_CONFIG = {
         "use_dagshub": False,
         "model_name": "sentiment-classifier",
     },
+    "model_registry": {
+        "description": "Sentiment analysis model for classifying reviews as positive or negative.",
+        "created_by": "Prateek",
+        "tags": {
+            "project": "capstone-project-1",
+            "task": "sentiment-classification",
+            "framework": "scikit-learn",
+        },
+    },
 }
 
 
@@ -52,6 +61,8 @@ def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
         config[section].update(params.get(section, {}))
 
     config["model_building"].update(params.get("model_building", {}))
+    config["model_registry"].update(params.get("model_registry", {}))
+    config["model_registry"]["tags"].update(params.get("model_registry", {}).get("tags", {}))
     logger.info("Loaded evaluation parameters from %s", params_path)
     return config
 
@@ -139,6 +150,51 @@ def build_model_uri(run_id: str, model_name: str) -> str:
     return model_uri
 
 
+def build_run_description(
+    metadata: dict[str, Any],
+    config: dict[str, Any],
+    test_shape: list[int],
+) -> str:
+    lines = [
+        config["model_registry"]["description"],
+        "",
+        f"Created by: {config['model_registry']['created_by']}",
+        f"Production model type: {metadata['model_name']}",
+        f"Registry model name: {metadata['registry_model_name']}",
+        f"Target column: {metadata['target_column']}",
+        f"Train feature shape: {metadata['train_shape']}",
+        f"Test feature shape: {test_shape}",
+        f"Evaluation dataset: {config['data_paths']['test_features']}",
+    ]
+    return "\n".join(lines)
+
+
+def log_run_context(
+    metadata: dict[str, Any],
+    config: dict[str, Any],
+    test_shape: list[int],
+) -> None:
+    mlflow.log_param("target_column", metadata["target_column"])
+    mlflow.log_param("train_rows", metadata["train_shape"][0])
+    mlflow.log_param("train_feature_count", metadata["train_shape"][1])
+    mlflow.log_param("test_rows", test_shape[0])
+    mlflow.log_param("test_feature_count", test_shape[1])
+    mlflow.log_param("model_artifact_path", config["artifacts"]["model_path"])
+    mlflow.log_param("test_features_path", config["data_paths"]["test_features"])
+
+    tags = dict(config["model_registry"].get("tags", {}))
+    tags.update(
+        {
+            "created_by": config["model_registry"]["created_by"],
+            "algorithm": metadata["model_name"],
+            "registry_model_name": metadata["registry_model_name"],
+            "pipeline_stage": "model_evaluation",
+        }
+    )
+    mlflow.set_tags(tags)
+    mlflow.set_tag("mlflow.note.content", build_run_description(metadata, config, test_shape))
+
+
 def main() -> None:
     try:
         config = load_params("params.yaml")
@@ -157,6 +213,7 @@ def main() -> None:
         save_json(metrics, config["artifacts"]["metrics_path"])
 
         with mlflow.start_run(run_name=metadata["model_name"]) as run:
+            log_run_context(metadata, config, list(X_test.shape))
             for metric_name, metric_value in metrics.items():
                 if metric_value is not None:
                     mlflow.log_metric(metric_name, metric_value)

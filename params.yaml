@@ -38,7 +38,7 @@ model_building:
   model_name: "LogisticRegression"
   model_params:
     C: 1.0
-    penalty: "l2"
+    penalty: "l1"
     solver: "liblinear"
     max_iter: 1000
 
@@ -54,3 +54,15 @@ mlflow:
   use_dagshub: true
   model_name: "sentiment-classifier"
   stage: "Staging"
+
+model_registry:
+  description: "Sentiment analysis model for classifying IMDB reviews as positive or negative."
+  created_by: "Rinku"
+  aliases:
+    - "candidate"
+    - "latest"
+  tags:
+    project: "capstone-project-1"
+    task: "sentiment-classification"
+    framework: "scikit-learn"
+    dataset: "imdb-reviews"
