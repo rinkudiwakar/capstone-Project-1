@@ -10,13 +10,13 @@ from sklearn.preprocessing import MaxAbsScaler
 from src.logger.logging_file import logger
 
 
-TRAIN_DATA_PATH = "./data/interim/train_processed.csv"
-TEST_DATA_PATH = "./data/interim/test_processed.csv"
-PROCESSED_DIR = "./data/processed"
-MODEL_DIR = "./models"
-TEXT_COLUMN = "review"
-TARGET_COLUMN = "sentiment"
 DEFAULT_CONFIG = {
+    "train_data_path": "./data/interim/train_processed.csv",
+    "test_data_path": "./data/interim/test_processed.csv",
+    "output_dir": "./data/processed",
+    "model_dir": "./models",
+    "text_column": "review",
+    "target_column": "sentiment",
     "max_features": 80,
     "ngram_range": [1, 1],
     "min_df": 1,
@@ -29,7 +29,7 @@ DEFAULT_CONFIG = {
 
 
 def load_params(params_path: str = "params.yaml") -> dict:
-    """Load parameters from YAML and fall back to defaults when unavailable."""
+    """Load feature engineering parameters from YAML."""
     config = DEFAULT_CONFIG.copy()
 
     if not os.path.exists(params_path):
@@ -55,17 +55,16 @@ def load_params(params_path: str = "params.yaml") -> dict:
         raise
 
 
-def load_data(file_path: str) -> pd.DataFrame:
+def load_data(file_path: str, text_column: str, target_column: str) -> pd.DataFrame:
     """Load a dataset and validate required columns."""
     try:
         df = pd.read_csv(file_path)
-        missing_columns = {TEXT_COLUMN, TARGET_COLUMN} - set(df.columns)
+        missing_columns = {text_column, target_column} - set(df.columns)
         if missing_columns:
             raise KeyError(f"Missing columns in {file_path}: {sorted(missing_columns)}")
 
-        df = df[[TEXT_COLUMN, TARGET_COLUMN]].copy()
-        df[TEXT_COLUMN] = df[TEXT_COLUMN].fillna("").astype(str)
-        df[TARGET_COLUMN] = df[TARGET_COLUMN]
+        df = df[[text_column, target_column]].copy()
+        df[text_column] = df[text_column].fillna("").astype(str)
         logger.info("Loaded dataset from %s with shape %s", file_path, df.shape)
         return df
     except pd.errors.ParserError as e:
@@ -84,10 +83,10 @@ def save_pickle_artifact(obj, file_path: str) -> None:
     logger.info("Saved artifact to %s", file_path)
 
 
-def build_feature_dataframe(matrix, feature_names, target) -> pd.DataFrame:
+def build_feature_dataframe(matrix, feature_names, target, target_column: str) -> pd.DataFrame:
     """Convert transformed features to a dataframe and append target labels."""
     feature_df = pd.DataFrame(matrix.toarray(), columns=feature_names)
-    feature_df[TARGET_COLUMN] = target
+    feature_df[target_column] = target
     return feature_df
 
 
@@ -99,6 +98,9 @@ def apply_feature_engineering(
     """Apply vectorization and optional feature selection/scaling."""
     try:
         logger.info("Starting feature engineering")
+        text_column = config["text_column"]
+        target_column = config["target_column"]
+        model_dir = config["model_dir"]
 
         vectorizer = CountVectorizer(
             max_features=config["max_features"],
@@ -106,10 +108,10 @@ def apply_feature_engineering(
             min_df=config["min_df"],
         )
 
-        X_train = train_data[TEXT_COLUMN].values
-        y_train = train_data[TARGET_COLUMN].values
-        X_test = test_data[TEXT_COLUMN].values
-        y_test = test_data[TARGET_COLUMN].values
+        X_train = train_data[text_column].values
+        y_train = train_data[target_column].values
+        X_test = test_data[text_column].values
+        y_test = test_data[target_column].values
 
         logger.info(
             "Applying CountVectorizer with max_features=%s, ngram_range=%s, min_df=%s",
@@ -122,14 +124,14 @@ def apply_feature_engineering(
         feature_names = vectorizer.get_feature_names_out()
         logger.info("Vectorization complete. Generated %s features", len(feature_names))
 
-        save_pickle_artifact(vectorizer, os.path.join(MODEL_DIR, "vectorizer.pkl"))
+        save_pickle_artifact(vectorizer, os.path.join(model_dir, "vectorizer.pkl"))
 
         if config["apply_variance_threshold"] and X_train_features.shape[1] > 0:
             selector = VarianceThreshold(threshold=config["variance_threshold"])
             X_train_features = selector.fit_transform(X_train_features)
             X_test_features = selector.transform(X_test_features)
             feature_names = feature_names[selector.get_support()]
-            save_pickle_artifact(selector, os.path.join(MODEL_DIR, "variance_selector.pkl"))
+            save_pickle_artifact(selector, os.path.join(model_dir, "variance_selector.pkl"))
             logger.info(
                 "VarianceThreshold applied with threshold=%s. Remaining features: %s",
                 config["variance_threshold"],
@@ -140,7 +142,7 @@ def apply_feature_engineering(
             scaler = MaxAbsScaler()
             X_train_features = scaler.fit_transform(X_train_features)
             X_test_features = scaler.transform(X_test_features)
-            save_pickle_artifact(scaler, os.path.join(MODEL_DIR, "maxabs_scaler.pkl"))
+            save_pickle_artifact(scaler, os.path.join(model_dir, "maxabs_scaler.pkl"))
             logger.info("MaxAbsScaler applied to feature matrix")
 
         if config["apply_select_k_best"] and X_train_features.shape[1] > 0:
@@ -149,11 +151,11 @@ def apply_feature_engineering(
             X_train_features = selector.fit_transform(X_train_features, y_train)
             X_test_features = selector.transform(X_test_features)
             feature_names = feature_names[selector.get_support()]
-            save_pickle_artifact(selector, os.path.join(MODEL_DIR, "select_k_best.pkl"))
+            save_pickle_artifact(selector, os.path.join(model_dir, "select_k_best.pkl"))
             logger.info("SelectKBest applied with k=%s. Remaining features: %s", k, len(feature_names))
 
-        train_df = build_feature_dataframe(X_train_features, feature_names, y_train)
-        test_df = build_feature_dataframe(X_test_features, feature_names, y_test)
+        train_df = build_feature_dataframe(X_train_features, feature_names, y_train, target_column)
+        test_df = build_feature_dataframe(X_test_features, feature_names, y_test, target_column)
         logger.info(
             "Feature engineering completed. Train shape=%s, Test shape=%s",
             train_df.shape,
@@ -180,13 +182,21 @@ def main() -> None:
     try:
         logger.info("Feature engineering pipeline started")
         config = load_params("params.yaml")
-        train_data = load_data(TRAIN_DATA_PATH)
-        test_data = load_data(TEST_DATA_PATH)
+        train_data = load_data(
+            config["train_data_path"],
+            config["text_column"],
+            config["target_column"],
+        )
+        test_data = load_data(
+            config["test_data_path"],
+            config["text_column"],
+            config["target_column"],
+        )
 
         train_df, test_df = apply_feature_engineering(train_data, test_data, config)
 
-        save_data(train_df, os.path.join(PROCESSED_DIR, "train_bow.csv"))
-        save_data(test_df, os.path.join(PROCESSED_DIR, "test_bow.csv"))
+        save_data(train_df, os.path.join(config["output_dir"], "train_bow.csv"))
+        save_data(test_df, os.path.join(config["output_dir"], "test_bow.csv"))
         logger.info("Feature engineering pipeline completed successfully")
     except Exception as e:
         logger.exception("Failed to complete the feature engineering process: %s", e)

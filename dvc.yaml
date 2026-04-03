@@ -1,0 +1,92 @@
+# updated dvc.yaml
+
+stages:
+  data_ingestion:
+    cmd: python src/data/data_ingestion.py
+    deps:
+      - src/data/data_ingestion.py
+      - params.yaml
+    params:
+      - data_ingestion
+    outs:
+      - data/raw
+
+  data_preprocessing:
+    cmd: python src/data/data_preprocessing.py
+    deps:
+      - data/raw
+      - src/data/data_preprocessing.py
+      - params.yaml
+    params:
+      - data_preprocessing
+    outs:
+      - data/interim
+
+  feature_engineering:
+    cmd: python src/features/feature_engineering.py
+    deps:
+      - data/interim
+      - src/features/feature_engineering.py
+      - params.yaml
+    params:
+      - feature_engineering
+    outs:
+      - data/processed
+      - models/vectorizer.pkl
+      - models/maxabs_scaler.pkl
+      - models/variance_selector.pkl
+      - models/select_k_best.pkl
+
+  model_building:
+    cmd: python src/model/model_building.py
+    deps:
+      - data/processed/train_bow.csv
+      - src/model/model_building.py
+      - params.yaml
+    params:
+      - data_paths
+      - model_building
+      - artifacts.model_path
+      - artifacts.metadata_path
+      - mlflow.model_name
+    outs:
+      - models/model.pkl
+      - models/model_metadata.json
+
+  model_evaluation:
+    cmd: python src/model/model_evaluation.py
+    deps:
+      - models/model.pkl
+      - models/model_metadata.json
+      - data/processed/test_bow.csv
+      - src/model/model_evaluation.py
+      - params.yaml
+    metrics:
+      - reports/metrics.json
+    params:
+      - data_paths.test_features
+      - model_building.target_column
+      - artifacts.model_path
+      - artifacts.metadata_path
+      - artifacts.metrics_path
+      - artifacts.experiment_info_path
+      - mlflow.experiment_name
+      - mlflow.use_dagshub
+      - model_registry
+    outs:
+      - reports/experiment_info.json
+
+  model_registration:
+    cmd: python src/model/register_model.py
+    deps:
+      - reports/experiment_info.json
+      - models/model_metadata.json
+      - src/model/register_model.py
+      - params.yaml
+    params:
+      - artifacts.experiment_info_path
+      - artifacts.metadata_path
+      - mlflow.model_name
+      - mlflow.stage
+      - mlflow.use_dagshub
+      - model_registry

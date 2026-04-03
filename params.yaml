@@ -23,10 +23,10 @@ feature_engineering:
   max_features: 80
   ngram_range: [1, 1]
   min_df: 1
-  apply_variance_threshold: false
+  apply_variance_threshold: true
   variance_threshold: 0.0
   apply_maxabs_scaler: true
-  apply_select_k_best: false
+  apply_select_k_best: true
   select_k_best: 30
 
 data_paths:
