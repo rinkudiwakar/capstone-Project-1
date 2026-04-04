@@ -178,8 +178,8 @@ stages:
       size: 1859
     - path: src/model/model_evaluation.py
       hash: md5
-      md5: a99ce84a2b58fd6102fd13caf2b45793
-      size: 9876
+      md5: 87983f35e6e681edc84776685320bd01
+      size: 8964
     params:
       params.yaml:
         artifacts.experiment_info_path: ./reports/experiment_info.json
@@ -205,8 +205,8 @@ stages:
     outs:
     - path: reports/experiment_info.json
       hash: md5
-      md5: 2f68d9760c1b890b731d61f658db6fea
-      size: 242
+      md5: 894bd0f9d4e1d250c6b875f4c1e7482b
+      size: 189
     - path: reports/metrics.json
       hash: md5
       md5: b2a633a9c667a4ec2d34abac63b103fa
@@ -224,8 +224,8 @@ stages:
       size: 1859
     - path: reports/experiment_info.json
       hash: md5
-      md5: 2f68d9760c1b890b731d61f658db6fea
-      size: 242
+      md5: 894bd0f9d4e1d250c6b875f4c1e7482b
+      size: 189
     - path: src/model/register_model.py
       hash: md5
       md5: 26d250beae75522d9ce89e98e5850475
