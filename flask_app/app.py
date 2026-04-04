@@ -18,13 +18,22 @@ REPO_ROOT = BASE_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from load_model import bootstrap_inference_assets
-from preprocessing_utility import (
-    ensure_nltk_resources,
-    predict_label,
-    preprocess_input_text,
-    transform_text_to_features,
-)
+try:
+    from .load_model import bootstrap_inference_assets
+    from .preprocessing_utility import (
+        ensure_nltk_resources,
+        predict_label,
+        preprocess_input_text,
+        transform_text_to_features,
+    )
+except ImportError:
+    from load_model import bootstrap_inference_assets
+    from preprocessing_utility import (
+        ensure_nltk_resources,
+        predict_label,
+        preprocess_input_text,
+        transform_text_to_features,
+    )
 
 
 warnings.simplefilter("ignore", UserWarning)
