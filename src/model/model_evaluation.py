@@ -216,7 +216,7 @@ def main() -> None:
             for param_name, param_value in metadata["model_params"].items():
                 mlflow.log_param(param_name, param_value)
 
-            logged_model = mlflow.sklearn.log_model(model, name="model")
+            logged_model = mlflow.sklearn.log_model(model, artifact_path="model")
             mlflow.log_artifact(config["artifacts"]["model_path"], artifact_path="model_pickle")
 
             experiment_info = {
