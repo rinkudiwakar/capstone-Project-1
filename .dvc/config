@@ -1,0 +1,5 @@
+[core]
+    remote = myremote
+['remote "myremote"']
+    url = s3://imdb-model-data/dvc-store
+    region = eu-north-1
