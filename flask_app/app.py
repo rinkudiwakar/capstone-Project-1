@@ -104,7 +104,7 @@ def configure_tracking() -> None:
         tracking_uri = f"https://dagshub.com/{repo_owner}/{repo_name}.mlflow"
 
     if dagshub_token:
-        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
+        os.environ["MLFLOW_TRACKING_USERNAME"] = repo_owner
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
 
     mlflow.set_tracking_uri(tracking_uri)

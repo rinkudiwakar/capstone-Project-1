@@ -83,8 +83,10 @@ def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
         dagshub_token = os.getenv("CAPSTONE_TEST")
         if not dagshub_token:
             raise EnvironmentError("CAPSTONE_TEST environment variable is not set")
+        if not repo_owner:
+            raise EnvironmentError("DAGSHUB_REPO_OWNER environment variable is required")
 
-        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
+        os.environ["MLFLOW_TRACKING_USERNAME"] = repo_owner
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
 
     mlflow.set_tracking_uri(tracking_uri)
