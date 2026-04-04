@@ -62,7 +62,6 @@ model_registry:
   created_by: "Rinku"
   aliases:
     - "candidate"
-    - "latest"
   tags:
     project: "capstone-project-1"
     task: "sentiment-classification"

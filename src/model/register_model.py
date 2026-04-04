@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
         },
     },
 }
+RESERVED_MODEL_ALIASES = {"latest"}
 
 
 def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
@@ -150,11 +151,26 @@ def apply_registry_metadata(
         client.set_model_version_tag(registered_model_name, model_version, key, str(value))
 
     aliases = registry_config.get("aliases", [])
+    applied_aliases = []
     for alias in aliases:
-        client.set_registered_model_alias(registered_model_name, alias, model_version)
+        normalized_alias = str(alias).strip()
+        if not normalized_alias:
+            continue
+        if normalized_alias.lower() in RESERVED_MODEL_ALIASES:
+            logger.warning(
+                "Skipping reserved MLflow alias '%s' for model %s version %s",
+                normalized_alias,
+                registered_model_name,
+                model_version,
+            )
+            continue
+
+        client.set_registered_model_alias(registered_model_name, normalized_alias, model_version)
+        applied_aliases.append(normalized_alias)
 
     logger.info(
-        "Applied description, tags, and aliases to registered model %s version %s",
+        "Applied description, tags, and aliases %s to registered model %s version %s",
+        applied_aliases,
         registered_model_name,
         model_version,
     )
