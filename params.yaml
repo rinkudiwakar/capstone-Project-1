@@ -55,7 +55,8 @@ artifacts:
 mlflow:
   experiment_name: "Sentiment model Pipeline"
   model_name: "sentiment-classifier"
-  stage: "Staging"
+  candidate_alias: "candidate"
+  production_alias: "champion"
 
 model_registry:
   description: "Sentiment analysis model for classifying IMDB reviews as positive or negative."

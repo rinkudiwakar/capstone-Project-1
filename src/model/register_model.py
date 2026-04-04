@@ -15,8 +15,9 @@ DEFAULT_CONFIG = {
         "metadata_path": "./models/model_metadata.json",
     },
     "mlflow": {
-        "stage": "Staging",
         "model_name": "sentiment-classifier",
+        "candidate_alias": "candidate",
+        "production_alias": "champion",
     },
     "model_registry": {
         "description": "Sentiment analysis model for classifying reviews as positive or negative.",
@@ -98,14 +99,14 @@ def build_registered_model_description(
 
 
 def build_model_version_description(
-    stage: str,
+    candidate_alias: str,
     model_info: dict[str, Any],
     model_metadata: dict[str, Any],
 ) -> str:
     lines = [
         f"Registered from MLflow run: {model_info['run_id']}",
         f"Source model URI: {model_info['model_uri']}",
-        f"Target stage: {stage}",
+        f"Candidate alias: {candidate_alias}",
     ]
 
     if model_metadata.get("model_params"):
@@ -118,7 +119,7 @@ def apply_registry_metadata(
     client: mlflow.tracking.MlflowClient,
     registered_model_name: str,
     model_version: str,
-    stage: str,
+    candidate_alias: str,
     registry_config: dict[str, Any],
     model_info: dict[str, Any],
     model_metadata: dict[str, Any],
@@ -130,7 +131,7 @@ def apply_registry_metadata(
     client.update_model_version(
         name=registered_model_name,
         version=model_version,
-        description=build_model_version_description(stage, model_info, model_metadata),
+        description=build_model_version_description(candidate_alias, model_info, model_metadata),
     )
 
     combined_tags = dict(registry_config.get("tags", {}))
@@ -139,7 +140,7 @@ def apply_registry_metadata(
             "created_by": registry_config.get("created_by", "unknown"),
             "run_id": model_info["run_id"],
             "source_model_uri": model_info["model_uri"],
-            "current_stage": stage,
+            "candidate_alias": candidate_alias,
         }
     )
 
@@ -179,32 +180,28 @@ def apply_registry_metadata(
 def register_model(
     model_name: str,
     model_info: dict[str, Any],
-    stage: str,
+    candidate_alias: str,
     registry_config: dict[str, Any],
     model_metadata: dict[str, Any],
 ) -> None:
     registered_model = mlflow.register_model(model_info["model_uri"], model_name)
 
     client = mlflow.tracking.MlflowClient()
-    client.transition_model_version_stage(
-        name=model_name,
-        version=registered_model.version,
-        stage=stage,
-    )
     apply_registry_metadata(
         client=client,
         registered_model_name=model_name,
         model_version=registered_model.version,
-        stage=stage,
+        candidate_alias=candidate_alias,
         registry_config=registry_config,
         model_info=model_info,
         model_metadata=model_metadata,
     )
+    client.set_registered_model_alias(model_name, candidate_alias, registered_model.version)
     logger.info(
-        "Registered model %s version %s and transitioned it to %s",
+        "Registered model %s version %s and assigned alias %s",
         model_name,
         registered_model.version,
-        stage,
+        candidate_alias,
     )
 
 
@@ -220,7 +217,7 @@ def main() -> None:
         register_model(
             model_name=model_name,
             model_info=model_info,
-            stage=config["mlflow"]["stage"],
+            candidate_alias=config["mlflow"]["candidate_alias"],
             registry_config=config["model_registry"],
             model_metadata=model_metadata,
         )

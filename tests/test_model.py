@@ -23,13 +23,13 @@ class TestModelLoading(unittest.TestCase):
     def setUpClass(cls):
         params = load_params(REPO_ROOT / "params.yaml")
         cls.model_name = params["mlflow"]["model_name"]
-        cls.target_stage = params["mlflow"].get("stage", "Staging")
+        cls.target_alias = params["mlflow"].get("candidate_alias", "candidate")
         cls.test_data_path = REPO_ROOT / params["data_paths"]["test_features"]
         cls.experiment_info_path = REPO_ROOT / params["artifacts"]["experiment_info_path"]
 
         configure_mlflow()
         cls.client = mlflow.MlflowClient()
-        cls.model_version = cls.get_latest_model_version(cls.model_name, cls.target_stage)
+        cls.model_version = cls.get_model_version_by_alias(cls.model_name, cls.target_alias)
         cls.model_uri = f"models:/{cls.model_name}/{cls.model_version}"
         cls.model = mlflow.pyfunc.load_model(cls.model_uri)
         cls.holdout_data = pd.read_csv(cls.test_data_path)
@@ -38,16 +38,16 @@ class TestModelLoading(unittest.TestCase):
             cls.experiment_info = json.load(file)
 
     @classmethod
-    def get_latest_model_version(cls, model_name: str, stage: str) -> str:
-        latest_versions = cls.client.get_latest_versions(model_name, stages=[stage])
-        if not latest_versions:
-            raise ValueError(f"No model versions found for '{model_name}' in stage '{stage}'")
-        return latest_versions[0].version
+    def get_model_version_by_alias(cls, model_name: str, alias: str) -> str:
+        model_version = cls.client.get_model_version_by_alias(model_name, alias)
+        if not model_version:
+            raise ValueError(f"No model version found for '{model_name}' with alias '{alias}'")
+        return model_version.version
 
     def test_model_loaded_properly(self):
         self.assertIsNotNone(self.model)
 
-    def test_model_stage_exists(self):
+    def test_model_alias_exists(self):
         self.assertIsNotNone(self.model_version)
         self.assertTrue(str(self.model_version).strip())
 
