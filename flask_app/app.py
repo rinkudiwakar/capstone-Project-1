@@ -97,14 +97,15 @@ def configure_tracking() -> None:
     """Configure MLflow tracking and optional DagsHub auth."""
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
     dagshub_token = os.getenv("CAPSTONE_TEST")
-    repo_owner = os.getenv("DAGSHUB_REPO_OWNER", "rinkudiwakar")
-    repo_name = os.getenv("DAGSHUB_REPO_NAME", "capstone-Project-1")
+    dagshub_url = "https://dagshub.com"
+    repo_owner = "rinkudiwakar"
+    repo_name = "capstone-Project-1"
 
     if not tracking_uri:
-        tracking_uri = f"https://dagshub.com/{repo_owner}/{repo_name}.mlflow"
+        tracking_uri = f"{dagshub_url}/{repo_owner}/{repo_name}.mlflow"
 
     if dagshub_token:
-        os.environ["MLFLOW_TRACKING_USERNAME"] = repo_owner
+        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
 
     mlflow.set_tracking_uri(tracking_uri)
