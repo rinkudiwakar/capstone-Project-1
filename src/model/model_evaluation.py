@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
         "test_features": "./data/processed/test_bow.csv",
     },
     "artifacts": {
+        "model_dir": "./models",
         "model_path": "./models/model.pkl",
         "metadata_path": "./models/model_metadata.json",
         "metrics_path": "./reports/metrics.json",
@@ -195,6 +196,25 @@ def log_run_context(
     mlflow.set_tag("mlflow.note.content", build_run_description(metadata, config, test_shape))
 
 
+def log_preprocessing_artifacts(model_dir: str) -> list[str]:
+    """Log feature engineering artifacts so serving can load them from MLflow."""
+    artifact_files = [
+        "vectorizer.pkl",
+        "variance_selector.pkl",
+        "maxabs_scaler.pkl",
+        "select_k_best.pkl",
+    ]
+    logged_files: list[str] = []
+
+    for file_name in artifact_files:
+        file_path = os.path.join(model_dir, file_name)
+        if os.path.exists(file_path):
+            mlflow.log_artifact(file_path, artifact_path="preprocessing")
+            logged_files.append(file_name)
+
+    return logged_files
+
+
 def main() -> None:
     try:
         config = load_params("params.yaml")
@@ -225,12 +245,16 @@ def main() -> None:
 
             logged_model = mlflow.sklearn.log_model(model, name="model")
             mlflow.log_artifact(config["artifacts"]["model_path"], artifact_path="model_pickle")
+            logged_preprocess = log_preprocessing_artifacts(config["artifacts"]["model_dir"])
+            if logged_preprocess:
+                mlflow.log_param("preprocessing_artifacts", ",".join(logged_preprocess))
 
             experiment_info = {
                 "run_id": run.info.run_id,
                 "model_path": "model",
                 "model_uri": getattr(logged_model, "model_uri", build_model_uri(run.info.run_id, "model")),
                 "model_name": metadata["registry_model_name"],
+                "preprocessing_artifact_path": "preprocessing",
             }
             save_json(experiment_info, config["artifacts"]["experiment_info_path"])
             mlflow.log_artifact(config["artifacts"]["metrics_path"])
