@@ -96,7 +96,7 @@ def preprocess_input_text(text: str) -> str:
 def configure_tracking() -> None:
     """Configure MLflow tracking and optional DagsHub auth."""
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-    dagshub_token = os.getenv("CAPSTONE_TEST")
+    dagshub_token = os.getenv("MLFLOW_TRACKING_PASSWORD")
     dagshub_url = "https://dagshub.com"
     repo_owner = "rinkudiwakar"
     repo_name = "capstone-Project-1"

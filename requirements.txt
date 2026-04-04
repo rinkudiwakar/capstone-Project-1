@@ -16,6 +16,7 @@ nltk
 xgboost
 mlflow
 dagshub
+boto3
 
 # Project tooling currently present in the repo
 Sphinx

@@ -7,13 +7,10 @@ import mlflow
 import mlflow.sklearn
 import pandas as pd
 import yaml
-from dotenv import load_dotenv
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 
 from src.logger.logging_file import logger
-
-
-load_dotenv()
+from src.model.mlflow_config import configure_mlflow
 
 
 DEFAULT_CONFIG = {
@@ -31,7 +28,6 @@ DEFAULT_CONFIG = {
     },
     "mlflow": {
         "experiment_name": "my-dvc-pipeline",
-        "use_dagshub": False,
         "model_name": "sentiment-classifier",
     },
     "model_registry": {
@@ -64,27 +60,6 @@ def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
     config["model_registry"]["tags"].update(params.get("model_registry", {}).get("tags", {}))
     logger.info("Loaded evaluation parameters from %s", params_path)
     return config
-
-
-def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-    dagshub_url = "https://dagshub.com"
-    repo_owner = "rinkudiwakar"
-    repo_name = "capstone-Project-1"
-
-    if not tracking_uri:
-        tracking_uri = f"{dagshub_url}/{repo_owner}/{repo_name}.mlflow"
-
-    if mlflow_config.get("use_dagshub"):
-        dagshub_token = os.getenv("CAPSTONE_TEST")
-        if not dagshub_token:
-            raise EnvironmentError("CAPSTONE_TEST environment variable is not set")
-
-        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
-        os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
-
-    mlflow.set_tracking_uri(tracking_uri)
-    logger.info("MLflow tracking URI configured")
 
 
 def load_model(file_path: str):
@@ -189,8 +164,7 @@ def log_run_context(
 def main() -> None:
     try:
         config = load_params("params.yaml")
-        configure_mlflow(config["mlflow"])
-        mlflow.set_experiment(config["mlflow"]["experiment_name"])
+        configure_mlflow(config["mlflow"]["experiment_name"])
 
         target_column = config["model_building"]["target_column"]
         model = load_model(config["artifacts"]["model_path"])

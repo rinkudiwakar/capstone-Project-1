@@ -4,12 +4,9 @@ from typing import Any
 
 import mlflow
 import yaml
-from dotenv import load_dotenv
 
 from src.logger.logging_file import logger
-
-
-load_dotenv()
+from src.model.mlflow_config import configure_mlflow
 
 
 DEFAULT_CONFIG = {
@@ -18,7 +15,6 @@ DEFAULT_CONFIG = {
         "metadata_path": "./models/model_metadata.json",
     },
     "mlflow": {
-        "use_dagshub": False,
         "stage": "Staging",
         "model_name": "sentiment-classifier",
     },
@@ -53,27 +49,6 @@ def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
     return config
 
 
-def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-    dagshub_url = "https://dagshub.com"
-    repo_owner = "rinkudiwakar"
-    repo_name = "capstone-Project-1"
-
-    if not tracking_uri:
-        tracking_uri = f"{dagshub_url}/{repo_owner}/{repo_name}.mlflow"
-
-    if mlflow_config.get("use_dagshub"):
-        dagshub_token = os.getenv("CAPSTONE_TEST")
-        if not dagshub_token:
-            raise EnvironmentError("CAPSTONE_TEST environment variable is not set")
-
-        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
-        os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
-
-    mlflow.set_tracking_uri(tracking_uri)
-    logger.info("MLflow tracking URI configured for model registration")
-
-
 def load_model_info(file_path: str) -> dict[str, Any]:
     with open(file_path, "r", encoding="utf-8") as file:
         model_info = json.load(file)
@@ -98,7 +73,7 @@ def validate_model_info(model_info: dict[str, Any]) -> None:
         raise ValueError(
             "model_uri is missing from experiment_info.json. "
             "Please rerun model evaluation before registration."
-    )
+        )
     logger.info("Validated model URI %s", model_info["model_uri"])
 
 
@@ -220,7 +195,7 @@ def register_model(
 def main() -> None:
     try:
         config = load_params("params.yaml")
-        configure_mlflow(config["mlflow"])
+        configure_mlflow()
 
         model_info = load_model_info(config["artifacts"]["experiment_info_path"])
         model_metadata = load_model_metadata(config["artifacts"]["metadata_path"])

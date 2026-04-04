@@ -54,7 +54,6 @@ artifacts:
 
 mlflow:
   experiment_name: "Sentiment model Pipeline"
-  use_dagshub: true
   model_name: "sentiment-classifier"
   stage: "Staging"
 
