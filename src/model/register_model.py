@@ -59,6 +59,7 @@ def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
     dagshub_repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
     dagshub_repo_name = os.getenv("DAGSHUB_REPO_NAME")
     dagshub_token = os.getenv("CAPSTONE_TEST")
+    dagshub_username = os.getenv("DAGSHUB_USERNAME") or dagshub_repo_owner
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true" or os.getenv("CI", "").lower() == "true"
 
     if mlflow_config.get("use_dagshub"):
@@ -69,7 +70,10 @@ def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
                 "DAGSHUB_REPO_OWNER and DAGSHUB_REPO_NAME environment variables are required"
             )
 
-        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
+        if not dagshub_username:
+            raise EnvironmentError("DAGSHUB_USERNAME or DAGSHUB_REPO_OWNER must be set")
+
+        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_username
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
         os.environ["DAGSHUB_USER_TOKEN"] = dagshub_token
 
