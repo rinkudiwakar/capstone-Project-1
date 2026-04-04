@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
         "test_features": "./data/processed/test_bow.csv",
     },
     "artifacts": {
+        "model_dir": "./models",
         "model_path": "./models/model.pkl",
         "metadata_path": "./models/model_metadata.json",
         "metrics_path": "./reports/metrics.json",
@@ -40,6 +41,13 @@ DEFAULT_CONFIG = {
         },
     },
 }
+
+PREPROCESSING_ARTIFACT_FILES = (
+    "vectorizer.pkl",
+    "variance_selector.pkl",
+    "maxabs_scaler.pkl",
+    "select_k_best.pkl",
+)
 
 
 def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
@@ -109,6 +117,22 @@ def save_json(payload: dict[str, Any], file_path: str) -> None:
     logger.info("Saved JSON artifact to %s", file_path)
 
 
+def log_preprocessing_artifacts(model_dir: str) -> list[str]:
+    """Log feature engineering artifacts needed for inference."""
+    logged_artifacts: list[str] = []
+
+    for file_name in PREPROCESSING_ARTIFACT_FILES:
+        file_path = os.path.join(model_dir, file_name)
+        if os.path.exists(file_path):
+            mlflow.log_artifact(file_path, artifact_path="preprocessing")
+            logged_artifacts.append(file_name)
+            logger.info("Logged preprocessing artifact to MLflow: %s", file_path)
+        else:
+            logger.warning("Preprocessing artifact not found, skipping MLflow log: %s", file_path)
+
+    return logged_artifacts
+
+
 def build_model_uri(run_id: str, model_name: str) -> str:
     """Build a run-scoped model URI for later registration."""
     model_uri = f"runs:/{run_id}/{model_name}"
@@ -139,14 +163,17 @@ def log_run_context(
     metadata: dict[str, Any],
     config: dict[str, Any],
     test_shape: list[int],
+    preprocessing_artifacts: list[str],
 ) -> None:
     mlflow.log_param("target_column", metadata["target_column"])
     mlflow.log_param("train_rows", metadata["train_shape"][0])
     mlflow.log_param("train_feature_count", metadata["train_shape"][1])
     mlflow.log_param("test_rows", test_shape[0])
     mlflow.log_param("test_feature_count", test_shape[1])
+    mlflow.log_param("model_dir", config["artifacts"]["model_dir"])
     mlflow.log_param("model_artifact_path", config["artifacts"]["model_path"])
     mlflow.log_param("test_features_path", config["data_paths"]["test_features"])
+    mlflow.log_param("preprocessing_artifacts", ",".join(preprocessing_artifacts))
 
     tags = dict(config["model_registry"].get("tags", {}))
     tags.update(
@@ -178,7 +205,8 @@ def main() -> None:
         save_json(metrics, config["artifacts"]["metrics_path"])
 
         with mlflow.start_run(run_name=metadata["model_name"]) as run:
-            log_run_context(metadata, config, list(X_test.shape))
+            preprocessing_artifacts = log_preprocessing_artifacts(config["artifacts"]["model_dir"])
+            log_run_context(metadata, config, list(X_test.shape), preprocessing_artifacts)
             for metric_name, metric_value in metrics.items():
                 if metric_value is not None:
                     mlflow.log_metric(metric_name, metric_value)
