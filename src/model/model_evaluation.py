@@ -3,7 +3,6 @@ import os
 import pickle
 from typing import Any
 
-import dagshub
 import mlflow
 import mlflow.sklearn
 import pandas as pd
@@ -69,40 +68,29 @@ def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
 
 
 def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-    dagshub_repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
-    dagshub_repo_name = os.getenv("DAGSHUB_REPO_NAME")
-    dagshub_token = os.getenv("CAPSTONE_TEST")
-    dagshub_username = os.getenv("DAGSHUB_USERNAME") or dagshub_repo_owner
-    is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true" or os.getenv("CI", "").lower() == "true"
-
     if mlflow_config.get("use_dagshub"):
+        dagshub_token = os.getenv("CAPSTONE_TEST")
         if not dagshub_token:
             raise EnvironmentError("CAPSTONE_TEST environment variable is not set")
-        if not dagshub_repo_owner or not dagshub_repo_name:
+
+        repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
+        repo_name = os.getenv("DAGSHUB_REPO_NAME")
+        if not repo_owner or not repo_name:
             raise EnvironmentError(
                 "DAGSHUB_REPO_OWNER and DAGSHUB_REPO_NAME environment variables are required"
             )
 
-        if not dagshub_username:
-            raise EnvironmentError("DAGSHUB_USERNAME or DAGSHUB_REPO_OWNER must be set")
-
-        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_username
+        os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
-        os.environ["DAGSHUB_USER_TOKEN"] = dagshub_token
 
-        # In CI we skip dagshub.init() to avoid interactive OAuth prompts.
-        if not is_ci:
-            dagshub.init(
-                repo_owner=dagshub_repo_owner,
-                repo_name=dagshub_repo_name,
-                mlflow=True,
-            )
+        dagshub_url = "https://dagshub.com"
+        mlflow.set_tracking_uri(f"{dagshub_url}/{repo_owner}/{repo_name}.mlflow")
+    else:
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+        if not tracking_uri:
+            raise EnvironmentError("MLFLOW_TRACKING_URI environment variable is not set")
+        mlflow.set_tracking_uri(tracking_uri)
 
-    if not tracking_uri:
-        raise EnvironmentError("MLFLOW_TRACKING_URI environment variable is not set")
-
-    mlflow.set_tracking_uri(tracking_uri)
     logger.info("MLflow tracking URI configured")
 
 

@@ -7,7 +7,6 @@ import string
 import time
 import warnings
 
-import dagshub
 import mlflow
 import nltk
 import pandas as pd
@@ -96,10 +95,6 @@ def preprocess_input_text(text: str) -> str:
 
 def configure_tracking() -> None:
     """Configure MLflow tracking and optional DagsHub auth."""
-    tracking_uri = os.getenv(
-        "MLFLOW_TRACKING_URI",
-        "https://dagshub.com/rinkudiwakar/capstone-Project-1.mlflow",
-    )
     dagshub_token = os.getenv("CAPSTONE_TEST")
     repo_owner = os.getenv("DAGSHUB_REPO_OWNER", "rinkudiwakar")
     repo_name = os.getenv("DAGSHUB_REPO_NAME", "capstone-Project-1")
@@ -107,13 +102,14 @@ def configure_tracking() -> None:
     if dagshub_token:
         os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
-
-        try:
-            dagshub.init(repo_owner=repo_owner, repo_name=repo_name, mlflow=True)
-        except Exception as exc:
-            print(f"Warning: DagsHub init failed, continuing with tracking URI only. Error: {exc}")
-
-    mlflow.set_tracking_uri(tracking_uri)
+        dagshub_url = "https://dagshub.com"
+        mlflow.set_tracking_uri(f"{dagshub_url}/{repo_owner}/{repo_name}.mlflow")
+    else:
+        tracking_uri = os.getenv(
+            "MLFLOW_TRACKING_URI",
+            "https://dagshub.com/rinkudiwakar/capstone-Project-1.mlflow",
+        )
+        mlflow.set_tracking_uri(tracking_uri)
 
 
 def get_latest_model_version(model_name: str):
