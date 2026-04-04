@@ -59,6 +59,7 @@ def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
     dagshub_repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
     dagshub_repo_name = os.getenv("DAGSHUB_REPO_NAME")
     dagshub_token = os.getenv("CAPSTONE_TEST")
+    is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true" or os.getenv("CI", "").lower() == "true"
 
     if mlflow_config.get("use_dagshub"):
         if not dagshub_token:
@@ -70,11 +71,15 @@ def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
 
         os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
-        dagshub.init(
-            repo_owner=dagshub_repo_owner,
-            repo_name=dagshub_repo_name,
-            mlflow=True,
-        )
+        os.environ["DAGSHUB_USER_TOKEN"] = dagshub_token
+
+        # In CI we skip dagshub.init() to avoid interactive OAuth prompts.
+        if not is_ci:
+            dagshub.init(
+                repo_owner=dagshub_repo_owner,
+                repo_name=dagshub_repo_name,
+                mlflow=True,
+            )
 
     if not tracking_uri:
         raise EnvironmentError("MLFLOW_TRACKING_URI environment variable is not set")
