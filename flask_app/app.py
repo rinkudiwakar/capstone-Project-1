@@ -118,6 +118,8 @@ def health():
     return jsonify(
         {
             "status": "ok",
+            "model_strategy": "mlflow-first with local-fallback",
+            "preprocessing_strategy": "local-first with mlflow-backup",
             "model_source": model_source["source"],
             "model_name": model_source.get("model_name"),
             "model_version": model_source.get("model_version"),

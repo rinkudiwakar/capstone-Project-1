@@ -16,6 +16,7 @@ MODEL_ARTIFACT_FILES = (
     "maxabs_scaler.pkl",
     "select_k_best.pkl",
 )
+_MLFLOW_ARTIFACT_CACHE: dict[tuple[str, str], Path | None] = {}
 
 
 def env_flag(name: str, default: bool) -> bool:
@@ -69,42 +70,93 @@ def get_latest_run_id() -> str | None:
 
 
 def download_mlflow_artifact(run_id: str, artifact_path: str) -> Path | None:
+    cache_key = (run_id, artifact_path)
+    if cache_key in _MLFLOW_ARTIFACT_CACHE:
+        return _MLFLOW_ARTIFACT_CACHE[cache_key]
+
     try:
         local_path = mlflow.artifacts.download_artifacts(
             run_id=run_id,
             artifact_path=artifact_path,
         )
-        return Path(local_path)
+        resolved_path = Path(local_path)
+        _MLFLOW_ARTIFACT_CACHE[cache_key] = resolved_path
+        return resolved_path
     except Exception as exc:
         print(f"Warning: could not load MLflow artifact '{artifact_path}' from run {run_id}: {exc}")
+        _MLFLOW_ARTIFACT_CACHE[cache_key] = None
         return None
 
 
-def load_pickle_from_mlflow_or_local(file_name: str, run_id: str | None):
+def load_file_from_downloaded_directory(directory_path: Path, file_name: str):
+    file_path = directory_path / file_name
+    if file_path.exists():
+        with open(file_path, "rb") as file:
+            return pickle.load(file), str(file_path)
+    return None, None
+
+
+def download_candidate_directories(run_id: str) -> dict[str, Path]:
+    """Download shared artifact directories once so startup stays fast."""
+    downloaded_directories: dict[str, Path] = {}
+    for directory_name in ("preprocessing", "artifacts"):
+        print_startup_step(f"Checking MLflow artifact directory '{directory_name}'")
+        local_directory = download_mlflow_artifact(run_id, directory_name)
+        if local_directory and local_directory.exists() and local_directory.is_dir():
+            downloaded_directories[directory_name] = local_directory
+            print_startup_step(f"Using MLflow artifact directory '{directory_name}'")
+    return downloaded_directories
+
+
+def load_pickle_from_mlflow_or_local(
+    file_name: str,
+    run_id: str | None,
+    downloaded_directories: dict[str, Path] | None = None,
+):
+    prefer_local_artifacts = env_flag("FLASK_APP_PREFER_LOCAL_ARTIFACTS", True)
     try_remote_artifacts = env_flag("FLASK_APP_ENABLE_REMOTE_ARTIFACTS", True)
 
+    local_path = REPO_ROOT / "models" / file_name
+    if prefer_local_artifacts and local_path.exists():
+        print_startup_step(f"Using local preprocessing artifact for {file_name}")
+        with open(local_path, "rb") as file:
+            return pickle.load(file), {
+                "source": "local",
+                "artifact_path": None,
+                "resolved_path": str(local_path),
+            }
+
     if try_remote_artifacts and run_id:
-        print_startup_step(f"Trying MLflow artifact for {file_name} using run_id={run_id}")
-        artifact_candidates = (
-            f"preprocessing/{file_name}",
-            f"artifacts/{file_name}",
-            file_name,
-        )
-        for artifact_path in artifact_candidates:
-            local_artifact = download_mlflow_artifact(run_id, artifact_path)
-            if local_artifact and local_artifact.exists():
-                with open(local_artifact, "rb") as file:
-                    print(f"Loaded {file_name} from MLflow artifact '{artifact_path}'")
-                    return pickle.load(file), {
-                        "source": "mlflow",
-                        "artifact_path": artifact_path,
-                        "resolved_path": str(local_artifact),
-                    }
+        print_startup_step(f"Resolving artifact {file_name} using run_id={run_id}")
+        downloaded_directories = downloaded_directories or {}
+
+        for directory_name, local_directory in downloaded_directories.items():
+            artifact_obj, resolved_file = load_file_from_downloaded_directory(
+                local_directory,
+                file_name,
+            )
+            if artifact_obj is not None:
+                print(f"Loaded {file_name} from MLflow artifact directory '{directory_name}'")
+                return artifact_obj, {
+                    "source": "mlflow",
+                    "artifact_path": f"{directory_name}/{file_name}",
+                    "resolved_path": resolved_file,
+                }
+
+        local_artifact = download_mlflow_artifact(run_id, file_name)
+        if local_artifact and local_artifact.exists():
+            with open(local_artifact, "rb") as file:
+                print(f"Loaded {file_name} from MLflow artifact '{file_name}'")
+                return pickle.load(file), {
+                    "source": "mlflow",
+                    "artifact_path": file_name,
+                    "resolved_path": str(local_artifact),
+                }
+
         print_startup_step(f"MLflow artifact unavailable for {file_name}. Falling back to local file.")
     elif not try_remote_artifacts:
         print_startup_step(f"Remote artifact loading disabled for {file_name}. Using local fallback.")
 
-    local_path = REPO_ROOT / "models" / file_name
     if not local_path.exists():
         print(f"Warning: local fallback artifact not found at {local_path}")
         return None, {
@@ -165,8 +217,23 @@ def load_serving_model():
 def load_inference_artifacts(run_id: str | None) -> tuple[dict[str, object | None], dict[str, dict[str, str | None]]]:
     artifacts = {}
     artifact_sources = {}
+    downloaded_directories: dict[str, Path] | None = None
+
     for file_name in MODEL_ARTIFACT_FILES:
-        artifact_obj, artifact_source = load_pickle_from_mlflow_or_local(file_name, run_id)
+        local_path = REPO_ROOT / "models" / file_name
+        if (
+            downloaded_directories is None
+            and run_id
+            and env_flag("FLASK_APP_ENABLE_REMOTE_ARTIFACTS", True)
+            and not local_path.exists()
+        ):
+            downloaded_directories = download_candidate_directories(run_id)
+
+        artifact_obj, artifact_source = load_pickle_from_mlflow_or_local(
+            file_name,
+            run_id,
+            downloaded_directories=downloaded_directories or {},
+        )
         artifacts[file_name] = artifact_obj
         artifact_sources[file_name] = artifact_source
     return artifacts, artifact_sources
