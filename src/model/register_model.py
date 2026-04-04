@@ -54,29 +54,26 @@ def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
 
 
 def configure_mlflow(mlflow_config: dict[str, Any]) -> None:
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
+    repo_name = os.getenv("DAGSHUB_REPO_NAME")
+
+    if not tracking_uri:
+        if not repo_owner or not repo_name:
+            raise EnvironmentError(
+                "Set MLFLOW_TRACKING_URI or both DAGSHUB_REPO_OWNER and DAGSHUB_REPO_NAME."
+            )
+        tracking_uri = f"https://dagshub.com/{repo_owner}/{repo_name}.mlflow"
+
     if mlflow_config.get("use_dagshub"):
         dagshub_token = os.getenv("CAPSTONE_TEST")
         if not dagshub_token:
             raise EnvironmentError("CAPSTONE_TEST environment variable is not set")
 
-        repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
-        repo_name = os.getenv("DAGSHUB_REPO_NAME")
-        if not repo_owner or not repo_name:
-            raise EnvironmentError(
-                "DAGSHUB_REPO_OWNER and DAGSHUB_REPO_NAME environment variables are required"
-            )
-
         os.environ["MLFLOW_TRACKING_USERNAME"] = dagshub_token
         os.environ["MLFLOW_TRACKING_PASSWORD"] = dagshub_token
 
-        dagshub_url = "https://dagshub.com"
-        mlflow.set_tracking_uri(f"{dagshub_url}/{repo_owner}/{repo_name}.mlflow")
-    else:
-        tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-        if not tracking_uri:
-            raise EnvironmentError("MLFLOW_TRACKING_URI environment variable is not set")
-        mlflow.set_tracking_uri(tracking_uri)
-
+    mlflow.set_tracking_uri(tracking_uri)
     logger.info("MLflow tracking URI configured for model registration")
 
 

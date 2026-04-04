@@ -38,7 +38,6 @@ jobs:
       - name: run pipeline
         env:
           CAPSTONE_TEST: ${{ secrets.CAPSTONE_TEST }}
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           DAGSHUB_REPO_OWNER: ${{ secrets.DAGSHUB_REPO_OWNER }}
           DAGSHUB_REPO_NAME: ${{ secrets.DAGSHUB_REPO_NAME }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
