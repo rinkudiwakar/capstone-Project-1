@@ -1,5 +1,8 @@
 data_ingestion:
   data_url: "https://raw.githubusercontent.com/vikashishere/Datasets/refs/heads/main/data.csv"
+  s3_bucket: "imdb-model-data"
+  s3_key: "raw/IMDB.csv"
+  s3_region: "eu-north-1"
   test_size: 0.2
   random_state: 42
   target_column: "sentiment"
@@ -38,9 +41,9 @@ model_building:
   model_name: "LogisticRegression"
   model_params:
     C: 1.0
-    penalty: "l1"
+    penalty: "l2"
     solver: "liblinear"
-    max_iter: 1000
+    max_iter: 500
 
 artifacts:
   model_dir: "./models"

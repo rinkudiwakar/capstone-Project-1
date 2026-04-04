@@ -2,6 +2,7 @@ import os
 
 import pandas as pd
 import yaml
+from dotenv import load_dotenv
 from sklearn.model_selection import train_test_split
 
 from src.connections import s3_connection
@@ -10,6 +11,9 @@ from src.logger.logging_file import logger
 
 DEFAULT_CONFIG = {
     "data_url": "https://raw.githubusercontent.com/vikashishere/Datasets/refs/heads/main/data.csv",
+    "s3_bucket": "imdb-model-data",
+    "s3_key": "data.csv",
+    "s3_region": "eu-north-1",
     "test_size": 0.2,
     "random_state": 42,
     "target_column": "sentiment",
@@ -87,17 +91,39 @@ def save_data(train_data: pd.DataFrame, test_data: pd.DataFrame, raw_data_dir: s
 
 def main() -> None:
     try:
+        load_dotenv()
         config = load_params("params.yaml")
 
-        data_url = config["data_url"]
+        s3_bucket = config["s3_bucket"]
+        s3_key = config["s3_key"]
+        s3_region = config["s3_region"]
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+
         target_column = config["target_column"]
         test_size = config["test_size"]
         random_state = config["random_state"]
         raw_data_dir = config["raw_data_dir"]
 
-        df = load_data(data_url=data_url)
-        # s3 = s3_connection.s3_operations("bucket-name", "accesskey", "secretkey")
-        # df = s3.fetch_file_from_s3("data.csv")
+        if not aws_access_key or not aws_secret_key:
+            raise ValueError(
+                "AWS credentials are missing. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env."
+            )
+        if not s3_bucket or not s3_key or not s3_region:
+            raise ValueError(
+                "S3 details are missing in params.yaml. Set data_ingestion.s3_bucket, s3_key, and s3_region."
+            )
+
+        s3 = s3_connection.s3_operations(
+            s3_bucket,
+            aws_access_key,
+            aws_secret_key,
+            s3_region,
+        )
+        df = s3.fetch_file_from_s3(s3_key)
+
+        if df is None:
+            raise ValueError("No dataframe was returned from S3. Check your bucket, key, and credentials.")
 
         final_df = preprocess_data(df, target_column=target_column)
         train_data, test_data = train_test_split(
