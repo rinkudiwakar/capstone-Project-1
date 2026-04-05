@@ -52,6 +52,30 @@ def get_latest_model_version(model_name: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def get_registered_model_reference() -> dict[str, str | None]:
+    """Return the currently promoted/registered model reference without loading artifacts."""
+    model_name = os.getenv("MLFLOW_MODEL_NAME", "sentiment-classifier")
+    configure_mlflow()
+
+    model_version, resolved_alias = get_latest_model_version(model_name)
+    if model_version is None:
+        return {
+            "model_name": model_name,
+            "model_version": None,
+            "resolved_alias": None,
+            "run_id": None,
+        }
+
+    client = mlflow.MlflowClient()
+    model_version_info = client.get_model_version(model_name, str(model_version))
+    return {
+        "model_name": model_name,
+        "model_version": str(model_version),
+        "resolved_alias": resolved_alias,
+        "run_id": getattr(model_version_info, "run_id", None),
+    }
+
+
 def get_latest_run_id() -> str | None:
     exp_info_path = REPO_ROOT / "reports" / "experiment_info.json"
     if not exp_info_path.exists():
@@ -277,7 +301,17 @@ def bootstrap_inference_assets():
             "Tip: set MLFLOW_ARTIFACT_UPLOAD_DOWNLOAD_TIMEOUT to limit slow MLflow artifact downloads."
         )
 
-    print_startup_step(f"Latest run_id from reports: {get_latest_run_id()}")
+    try:
+        latest_registered_reference = get_registered_model_reference()
+        print_startup_step(
+            "Latest registered MLflow reference: "
+            f"model={latest_registered_reference.get('model_name')}, "
+            f"alias={latest_registered_reference.get('resolved_alias')}, "
+            f"version={latest_registered_reference.get('model_version')}, "
+            f"run_id={latest_registered_reference.get('run_id')}"
+        )
+    except Exception as exc:
+        print_startup_step(f"Could not resolve latest registered MLflow reference: {exc}")
     try_remote_model = env_flag("FLASK_APP_ENABLE_REMOTE_MODEL", True)
 
     if try_remote_model:
