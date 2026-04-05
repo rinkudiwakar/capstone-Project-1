@@ -17,6 +17,7 @@ MODEL_ARTIFACT_FILES = (
     "select_k_best.pkl",
 )
 _MLFLOW_ARTIFACT_CACHE: dict[tuple[str, str], Path | None] = {}
+REGISTERED_MODEL_ALIASES = ("champion", "production", "candidate", "latest")
 
 
 def env_flag(name: str, default: bool) -> bool:
@@ -30,29 +31,25 @@ def print_startup_step(message: str) -> None:
     print(f"[startup] {message}")
 
 
-def get_latest_model_version(model_name: str) -> str | None:
+def load_local_pickle(file_path: Path):
+    with open(file_path, "rb") as file:
+        return pickle.load(file)
+
+
+def get_latest_model_version(model_name: str) -> tuple[str | None, str | None]:
     client = mlflow.MlflowClient()
 
-    try:
-        for alias in ("champion", "production", "candidate", "latest"):
-            try:
-                version = client.get_model_version_by_alias(model_name, alias)
-                if version:
-                    return version.version
-            except Exception:
-                continue
-    except Exception:
-        pass
-
-    try:
-        for stage in ("Production", "Staging", "None"):
-            versions = client.get_latest_versions(model_name, stages=[stage])
-            if versions:
-                return versions[0].version
-    except Exception:
-        return None
-
-    return None
+    for alias in REGISTERED_MODEL_ALIASES:
+        try:
+            version = client.get_model_version_by_alias(model_name, alias)
+            if version:
+                print_startup_step(
+                    f"Resolved registered model alias '{alias}' to version {version.version}"
+                )
+                return str(version.version), alias
+        except Exception:
+            continue
+    return None, None
 
 
 def get_latest_run_id() -> str | None:
@@ -91,15 +88,14 @@ def download_mlflow_artifact(run_id: str, artifact_path: str) -> Path | None:
 def load_file_from_downloaded_directory(directory_path: Path, file_name: str):
     file_path = directory_path / file_name
     if file_path.exists():
-        with open(file_path, "rb") as file:
-            return pickle.load(file), str(file_path)
+        return load_local_pickle(file_path), str(file_path)
     return None, None
 
 
 def download_candidate_directories(run_id: str) -> dict[str, Path]:
-    """Download shared artifact directories once so startup stays fast."""
+    """Download shared MLflow artifact directories for a registered model version."""
     downloaded_directories: dict[str, Path] = {}
-    for directory_name in ("preprocessing", "artifacts"):
+    for directory_name in ("preprocessing", "model_pickle"):
         print_startup_step(f"Checking MLflow artifact directory '{directory_name}'")
         local_directory = download_mlflow_artifact(run_id, directory_name)
         if local_directory and local_directory.exists() and local_directory.is_dir():
@@ -112,21 +108,10 @@ def load_pickle_from_mlflow_or_local(
     file_name: str,
     run_id: str | None,
     downloaded_directories: dict[str, Path] | None = None,
+    allow_local_fallback: bool = True,
 ):
-    prefer_local_artifacts = env_flag("FLASK_APP_PREFER_LOCAL_ARTIFACTS", True)
-    try_remote_artifacts = env_flag("FLASK_APP_ENABLE_REMOTE_ARTIFACTS", True)
-
     local_path = REPO_ROOT / "models" / file_name
-    if prefer_local_artifacts and local_path.exists():
-        print_startup_step(f"Using local preprocessing artifact for {file_name}")
-        with open(local_path, "rb") as file:
-            return pickle.load(file), {
-                "source": "local",
-                "artifact_path": None,
-                "resolved_path": str(local_path),
-            }
-
-    if try_remote_artifacts and run_id:
+    if run_id:
         print_startup_step(f"Resolving artifact {file_name} using run_id={run_id}")
         downloaded_directories = downloaded_directories or {}
 
@@ -145,17 +130,23 @@ def load_pickle_from_mlflow_or_local(
 
         local_artifact = download_mlflow_artifact(run_id, file_name)
         if local_artifact and local_artifact.exists():
-            with open(local_artifact, "rb") as file:
-                print(f"Loaded {file_name} from MLflow artifact '{file_name}'")
-                return pickle.load(file), {
-                    "source": "mlflow",
-                    "artifact_path": file_name,
-                    "resolved_path": str(local_artifact),
-                }
+            print(f"Loaded {file_name} from MLflow artifact '{file_name}'")
+            return load_local_pickle(local_artifact), {
+                "source": "mlflow",
+                "artifact_path": file_name,
+                "resolved_path": str(local_artifact),
+            }
 
-        print_startup_step(f"MLflow artifact unavailable for {file_name}. Falling back to local file.")
-    elif not try_remote_artifacts:
-        print_startup_step(f"Remote artifact loading disabled for {file_name}. Using local fallback.")
+        print_startup_step(
+            f"MLflow preprocessing artifact unavailable for {file_name}. Falling back to local file."
+        )
+
+    if not allow_local_fallback:
+        return None, {
+            "source": "missing",
+            "artifact_path": None,
+            "resolved_path": str(local_path),
+        }
 
     if not local_path.exists():
         print(f"Warning: local fallback artifact not found at {local_path}")
@@ -165,78 +156,118 @@ def load_pickle_from_mlflow_or_local(
             "resolved_path": str(local_path),
         }
 
-    with open(local_path, "rb") as file:
-        print(f"Loaded {file_name} from local path {local_path}")
-        return pickle.load(file), {
-            "source": "local",
-            "artifact_path": None,
-            "resolved_path": str(local_path),
-        }
+    print(f"Loaded {file_name} from local path {local_path}")
+    return load_local_pickle(local_path), {
+        "source": "local",
+        "artifact_path": None,
+        "resolved_path": str(local_path),
+    }
 
 
-def load_serving_model():
+def load_serving_model_from_mlflow():
     model_name = os.getenv("MLFLOW_MODEL_NAME", "sentiment-classifier")
-    try_remote_model = env_flag("FLASK_APP_ENABLE_REMOTE_MODEL", True)
+    print_startup_step(f"Trying MLflow registry model '{model_name}'")
+    configure_mlflow()
+    model_version, resolved_alias = get_latest_model_version(model_name)
+    if model_version is None:
+        raise FileNotFoundError(
+            f"No registered/promoted MLflow model version found for '{model_name}'"
+        )
 
-    if try_remote_model:
-        try:
-            print_startup_step(f"Trying MLflow registry model '{model_name}'")
-            configure_mlflow()
-            model_version = get_latest_model_version(model_name)
-            if model_version is not None:
-                model_uri = f"models:/{model_name}/{model_version}"
-                print_startup_step(f"Loading serving model from MLflow registry: {model_uri}")
-                return mlflow.pyfunc.load_model(model_uri), {
-                    "source": "mlflow",
-                    "model_uri": model_uri,
-                    "model_name": model_name,
-                    "model_version": str(model_version),
-                }
-            print_startup_step(f"No MLflow model version found for '{model_name}'. Falling back to local.")
-        except Exception as exc:
-            print(f"Warning: failed to load model from MLflow registry: {exc}")
-            print_startup_step("Falling back to local model file.")
-    else:
-        print_startup_step("Remote model loading disabled. Using local fallback.")
+    client = mlflow.MlflowClient()
+    model_version_info = client.get_model_version(model_name, str(model_version))
+    model_uri = f"models:/{model_name}/{model_version}"
+    print_startup_step(f"Loading serving model from MLflow registry: {model_uri}")
+    return mlflow.pyfunc.load_model(model_uri), {
+        "source": "mlflow",
+        "model_uri": model_uri,
+        "model_name": model_name,
+        "model_version": str(model_version),
+        "resolved_alias": resolved_alias,
+    }, getattr(model_version_info, "run_id", None)
+
+
+def load_serving_model_from_local():
+    model_name = os.getenv("MLFLOW_MODEL_NAME", "sentiment-classifier")
 
     local_model_path = REPO_ROOT / "models" / "model.pkl"
     if not local_model_path.exists():
         raise FileNotFoundError(f"Local fallback model not found at {local_model_path}")
 
-    with open(local_model_path, "rb") as file:
-        print(f"Using local model fallback: {local_model_path}")
-        return pickle.load(file), {
-            "source": "local",
-            "model_uri": None,
-            "model_name": model_name,
-            "model_version": None,
-            "resolved_path": str(local_model_path),
-        }
+    print(f"Using local model fallback: {local_model_path}")
+    return load_local_pickle(local_model_path), {
+        "source": "local",
+        "model_uri": None,
+        "model_name": model_name,
+        "model_version": None,
+        "resolved_alias": None,
+        "resolved_path": str(local_model_path),
+    }, get_latest_run_id()
 
 
-def load_inference_artifacts(run_id: str | None) -> tuple[dict[str, object | None], dict[str, dict[str, str | None]]]:
+def load_inference_artifacts(
+    run_id: str | None,
+    source: str,
+) -> tuple[dict[str, object | None], dict[str, dict[str, str | None]]]:
     artifacts = {}
     artifact_sources = {}
     downloaded_directories: dict[str, Path] | None = None
 
     for file_name in MODEL_ARTIFACT_FILES:
-        local_path = REPO_ROOT / "models" / file_name
-        if (
-            downloaded_directories is None
-            and run_id
-            and env_flag("FLASK_APP_ENABLE_REMOTE_ARTIFACTS", True)
-            and not local_path.exists()
-        ):
+        if downloaded_directories is None and run_id and source == "mlflow":
             downloaded_directories = download_candidate_directories(run_id)
 
         artifact_obj, artifact_source = load_pickle_from_mlflow_or_local(
-            file_name,
-            run_id,
+            file_name=file_name,
+            run_id=run_id if source == "mlflow" else None,
             downloaded_directories=downloaded_directories or {},
+            allow_local_fallback=(source == "local"),
         )
         artifacts[file_name] = artifact_obj
         artifact_sources[file_name] = artifact_source
     return artifacts, artifact_sources
+
+
+def load_mlflow_bundle():
+    model, model_source, run_id = load_serving_model_from_mlflow()
+    if not run_id:
+        raise ValueError("MLflow model version did not provide a run_id for artifact loading")
+
+    artifacts, artifact_sources = load_inference_artifacts(run_id, source="mlflow")
+    missing_artifacts = [
+        file_name for file_name, artifact_obj in artifacts.items() if artifact_obj is None
+    ]
+    if missing_artifacts:
+        raise FileNotFoundError(
+            f"Missing MLflow preprocessing artifacts for run {run_id}: {missing_artifacts}"
+        )
+
+    return {
+        "run_id": run_id,
+        "model": model,
+        "model_source": model_source,
+        "vectorizer": artifacts["vectorizer.pkl"],
+        "variance_selector": artifacts["variance_selector.pkl"],
+        "maxabs_scaler": artifacts["maxabs_scaler.pkl"],
+        "select_k_best": artifacts["select_k_best.pkl"],
+        "artifact_sources": artifact_sources,
+    }
+
+
+def load_local_bundle():
+    model, model_source, run_id = load_serving_model_from_local()
+    artifacts, artifact_sources = load_inference_artifacts(run_id, source="local")
+
+    return {
+        "run_id": run_id,
+        "model": model,
+        "model_source": model_source,
+        "vectorizer": artifacts["vectorizer.pkl"],
+        "variance_selector": artifacts["variance_selector.pkl"],
+        "maxabs_scaler": artifacts["maxabs_scaler.pkl"],
+        "select_k_best": artifacts["select_k_best.pkl"],
+        "artifact_sources": artifact_sources,
+    }
 
 
 def bootstrap_inference_assets():
@@ -246,27 +277,27 @@ def bootstrap_inference_assets():
             "Tip: set MLFLOW_ARTIFACT_UPLOAD_DOWNLOAD_TIMEOUT to limit slow MLflow artifact downloads."
         )
 
-    run_id = get_latest_run_id()
-    print_startup_step(f"Latest run_id from reports: {run_id}")
-    model, model_source = load_serving_model()
-    artifacts, artifact_sources = load_inference_artifacts(run_id)
+    print_startup_step(f"Latest run_id from reports: {get_latest_run_id()}")
+    try_remote_model = env_flag("FLASK_APP_ENABLE_REMOTE_MODEL", True)
 
-    vectorizer = artifacts["vectorizer.pkl"]
-    if vectorizer is None:
+    if try_remote_model:
+        try:
+            bootstrap_payload = load_mlflow_bundle()
+        except Exception as exc:
+            print(f"Warning: failed to load MLflow model/artifact bundle: {exc}")
+            print_startup_step(
+                "Falling back to local model and local artifacts because the registered MLflow bundle was unavailable."
+            )
+            bootstrap_payload = load_local_bundle()
+    else:
+        print_startup_step("Remote model loading disabled. Using local model and local artifacts.")
+        bootstrap_payload = load_local_bundle()
+
+    if bootstrap_payload["vectorizer"] is None:
         raise FileNotFoundError(
-            "vectorizer.pkl was not found in MLflow artifacts or local models directory"
+            "vectorizer.pkl was not found in the selected inference bundle"
         )
 
-    bootstrap_payload = {
-        "run_id": run_id,
-        "model": model,
-        "model_source": model_source,
-        "vectorizer": vectorizer,
-        "variance_selector": artifacts["variance_selector.pkl"],
-        "maxabs_scaler": artifacts["maxabs_scaler.pkl"],
-        "select_k_best": artifacts["select_k_best.pkl"],
-        "artifact_sources": artifact_sources,
-    }
     print_bootstrap_summary(bootstrap_payload)
     return bootstrap_payload
 
