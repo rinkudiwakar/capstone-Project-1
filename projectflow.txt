@@ -74,11 +74,6 @@
     AWS_ACCOUNT_ID
    (Also add this permission to the IAM user: AmazonEC2ContainerRegistryFullAccess)
 
-docker run -p 8888:5000 \
-  -e MLFLOW_TRACKING_URI="https://dagshub.com/rinkudiwakar/capstone-Project-1.mlflow" \
-  -e MLFLOW_TRACKING_USERNAME="rinkudiwakar" \
-  -e MLFLOW_TRACKING_PASSWORD="6f794e869f8c522fb797f341f71384161d4196aa" \
- capstone-app:latest
 
 38. Execute CICD pipeline till the stage where we build and push image to ECR.
 
