@@ -46,12 +46,12 @@ def transform_text_to_features(
     return features_df
 
 
-def predict_label(model, features_df: pd.DataFrame) -> str:
+def predict_label(model, features_df: pd.DataFrame) -> int:
     """Predict using either an MLflow pyfunc model or a local sklearn estimator."""
     result = model.predict(features_df)
     prediction = result[0]
 
     if isinstance(prediction, str):
-        return prediction
+        return 1 if prediction.lower() == "positive" else 0
 
-    return "positive" if int(prediction) == 1 else "negative"
+    return int(prediction)
