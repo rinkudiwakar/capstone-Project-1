@@ -13,7 +13,7 @@ TARGET_COLUMN = "sentiment"
 # 3 -> GradientBoosting
 # 4 -> MultinomialNB
 # 5 -> XGBoost
-SELECTED_MODEL_KEY = 1
+SELECTED_MODEL_KEY = 2
 
 MODEL_OPTIONS: dict[int, dict[str, Any]] = {
     1: {
@@ -30,9 +30,9 @@ MODEL_OPTIONS: dict[int, dict[str, Any]] = {
         "model_name": "LogisticRegression",
         "model_params": {
             "C": 1.0,
-            "penalty": "l1",
+            "penalty": "l2",
             "solver": "liblinear",
-            "max_iter": 800,
+            "max_iter": 500,
         },
     },
     3: {
