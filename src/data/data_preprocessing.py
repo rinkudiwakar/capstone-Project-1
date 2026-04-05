@@ -51,6 +51,7 @@ def ensure_nltk_resources() -> None:
         "stopwords": lambda: stopwords.words("english"),
         "wordnet": lambda: wordnet.ensure_loaded(),
         "averaged_perceptron_tagger_eng": lambda: pos_tag(["sample"]),
+        "omw-1.4": lambda: wordnet.ensure_loaded(),
     }
 
     for resource_name, checker in resource_checks.items():
