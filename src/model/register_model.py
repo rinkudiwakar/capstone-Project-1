@@ -5,6 +5,7 @@ from typing import Any
 import mlflow
 import yaml
 
+from src.constants.model_constants import get_mlflow_model_config
 from src.logger.logging_file import logger
 from src.model.mlflow_config import configure_mlflow
 
@@ -14,11 +15,7 @@ DEFAULT_CONFIG = {
         "experiment_info_path": "./reports/experiment_info.json",
         "metadata_path": "./models/model_metadata.json",
     },
-    "mlflow": {
-        "model_name": "sentiment-classifier",
-        "candidate_alias": "candidate",
-        "production_alias": "champion",
-    },
+    "mlflow": get_mlflow_model_config(),
     "model_registry": {
         "description": "Sentiment analysis model for classifying reviews as positive or negative.",
         "created_by": "Rinku",

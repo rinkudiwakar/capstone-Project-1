@@ -36,15 +36,6 @@ data_paths:
   train_features: "./data/processed/train_bow.csv"
   test_features: "./data/processed/test_bow.csv"
 
-model_building:
-  target_column: "sentiment"
-  model_name: "LogisticRegression"
-  model_params:
-    C: 1.0
-    penalty: "l1"
-    solver: "liblinear"
-    max_iter: 800
-
 artifacts:
   model_dir: "./models"
   model_path: "./models/model.pkl"
@@ -54,9 +45,6 @@ artifacts:
 
 mlflow:
   experiment_name: "Sentiment model Pipeline"
-  model_name: "sentiment-classifier"
-  candidate_alias: "candidate"
-  production_alias: "champion"
 
 model_registry:
   description: "Sentiment analysis model for classifying IMDB reviews as positive or negative."

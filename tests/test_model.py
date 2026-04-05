@@ -7,6 +7,7 @@ import pandas as pd
 import yaml
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
+from src.constants.model_constants import get_mlflow_model_config
 from src.model.mlflow_config import configure_mlflow
 
 
@@ -22,8 +23,9 @@ class TestModelLoading(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         params = load_params(REPO_ROOT / "params.yaml")
-        cls.model_name = params["mlflow"]["model_name"]
-        cls.target_alias = params["mlflow"].get("candidate_alias", "candidate")
+        mlflow_model_config = get_mlflow_model_config()
+        cls.model_name = mlflow_model_config["model_name"]
+        cls.target_alias = mlflow_model_config.get("candidate_alias", "candidate")
         cls.test_data_path = REPO_ROOT / params["data_paths"]["test_features"]
         cls.experiment_info_path = REPO_ROOT / params["artifacts"]["experiment_info_path"]
 

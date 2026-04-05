@@ -9,6 +9,7 @@ from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 
+from src.constants.model_constants import get_mlflow_model_config, get_model_building_config
 from src.logger.logging_file import logger
 
 try:
@@ -22,24 +23,13 @@ DEFAULT_CONFIG = {
         "train_features": "./data/processed/train_bow.csv",
         "test_features": "./data/processed/test_bow.csv",
     },
-    "model_building": {
-        "target_column": "sentiment",
-        "model_name": "LogisticRegression",
-        "model_params": {
-            "C": 1.0,
-            "penalty": "l1",
-            "solver": "liblinear",
-            "max_iter": 1000,
-        },
-    },
+    "model_building": get_model_building_config(),
     "artifacts": {
         "model_dir": "./models",
         "model_path": "./models/model.pkl",
         "metadata_path": "./models/model_metadata.json",
     },
-    "mlflow": {
-        "model_name": "sentiment-classifier",
-    },
+    "mlflow": get_mlflow_model_config(),
 }
 
 
@@ -55,13 +45,8 @@ def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
         with open(params_path, "r", encoding="utf-8") as file:
             params = yaml.safe_load(file) or {}
 
-        for section in ("data_paths", "artifacts", "mlflow"):
+        for section in ("data_paths", "artifacts"):
             config[section].update(params.get(section, {}))
-
-        config["model_building"].update(params.get("model_building", {}))
-        config["model_building"]["model_params"].update(
-            params.get("model_building", {}).get("model_params", {})
-        )
         logger.info("Loaded pipeline parameters from %s", params_path)
         return config
     except yaml.YAMLError as e:

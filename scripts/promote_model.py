@@ -1,20 +1,14 @@
-import yaml
-
 import mlflow
 
+from src.constants.model_constants import get_mlflow_model_config
 from src.model.mlflow_config import configure_mlflow
 
 
-def load_params(params_path: str = "params.yaml") -> dict:
-    with open(params_path, "r", encoding="utf-8") as file:
-        return yaml.safe_load(file) or {}
-
-
 def promote_model() -> None:
-    params = load_params("params.yaml")
-    model_name = params["mlflow"]["model_name"]
-    candidate_alias = params["mlflow"].get("candidate_alias", "candidate")
-    production_alias = params["mlflow"].get("production_alias", "champion")
+    mlflow_model_config = get_mlflow_model_config()
+    model_name = mlflow_model_config["model_name"]
+    candidate_alias = mlflow_model_config.get("candidate_alias", "candidate")
+    production_alias = mlflow_model_config.get("production_alias", "champion")
 
     configure_mlflow()
     client = mlflow.MlflowClient()

@@ -41,14 +41,13 @@ stages:
     cmd: python -m src.model.model_building
     deps:
       - data/processed/train_bow.csv
+      - src/constants/model_constants.py
       - src/model/model_building.py
       - params.yaml
     params:
       - data_paths
-      - model_building
       - artifacts.model_path
       - artifacts.metadata_path
-      - mlflow.model_name
     outs:
       - models/model.pkl
       - models/model_metadata.json
@@ -58,6 +57,7 @@ stages:
     deps:
       - models/model.pkl
       - models/model_metadata.json
+      - src/constants/model_constants.py
       - data/processed/test_bow.csv
       - src/model/model_evaluation.py
       - params.yaml
@@ -65,7 +65,6 @@ stages:
       - reports/metrics.json
     params:
       - data_paths.test_features
-      - model_building.target_column
       - artifacts.model_path
       - artifacts.metadata_path
       - artifacts.metrics_path
@@ -80,11 +79,10 @@ stages:
     deps:
       - reports/experiment_info.json
       - models/model_metadata.json
+      - src/constants/model_constants.py
       - src/model/register_model.py
       - params.yaml
     params:
       - artifacts.experiment_info_path
       - artifacts.metadata_path
-      - mlflow.model_name
-      - mlflow.candidate_alias
       - model_registry

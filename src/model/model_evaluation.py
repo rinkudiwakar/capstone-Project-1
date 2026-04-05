@@ -9,6 +9,7 @@ import pandas as pd
 import yaml
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 
+from src.constants.model_constants import get_mlflow_model_config, get_model_building_config
 from src.logger.logging_file import logger
 from src.model.mlflow_config import configure_mlflow
 
@@ -24,12 +25,10 @@ DEFAULT_CONFIG = {
         "metrics_path": "./reports/metrics.json",
         "experiment_info_path": "./reports/experiment_info.json",
     },
-    "model_building": {
-        "target_column": "sentiment",
-    },
+    "model_building": get_model_building_config(),
     "mlflow": {
         "experiment_name": "my-dvc-pipeline",
-        "model_name": "sentiment-classifier",
+        **get_mlflow_model_config(),
     },
     "model_registry": {
         "description": "Sentiment analysis model for classifying reviews as positive or negative.",
@@ -60,10 +59,10 @@ def load_params(params_path: str = "params.yaml") -> dict[str, Any]:
     with open(params_path, "r", encoding="utf-8") as file:
         params = yaml.safe_load(file) or {}
 
-    for section in ("data_paths", "artifacts", "mlflow"):
+    for section in ("data_paths", "artifacts"):
         config[section].update(params.get(section, {}))
 
-    config["model_building"].update(params.get("model_building", {}))
+    config["mlflow"].update(params.get("mlflow", {}))
     config["model_registry"].update(params.get("model_registry", {}))
     config["model_registry"]["tags"].update(params.get("model_registry", {}).get("tags", {}))
     logger.info("Loaded evaluation parameters from %s", params_path)
