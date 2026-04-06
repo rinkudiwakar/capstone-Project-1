@@ -93,12 +93,12 @@ jobs:
       
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --region us-east-1 --name flask-app-cluster
+          aws eks update-kubeconfig --region eu-north-1 --name flask-app-cluster
 
       - name: Create Kubernetes Secret
         run: |
-          kubectl create secret generic capstone-secret \
-            --from-literal=CAPSTONE_TEST=${{ secrets.MLFLOW_TRACKING_PASSWORD }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic mlflow-secrets \
+            --from-literal=MLFLOW_TRACKING_PASSWORD=${{ secrets.MLFLOW_TRACKING_PASSWORD }} --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy to EKS
         run: |
