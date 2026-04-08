@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  moviesentiment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: moviesentiment:local
+    container_name: moviesentiment
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: "5000"
+      FLASK_APP_LOAD_DOTENV: "false"
+      FLASK_APP_EAGER_STARTUP: "true"
+      FLASK_APP_PRELOAD_MOVIES: "true"
+      WATCHMODE_API_KEY: ${WATCHMODE_API_KEY:-}
+      WATCHMODE_REGION: ${WATCHMODE_REGION:-US}
+      MOVIE_CATALOG_LIMIT: ${MOVIE_CATALOG_LIMIT:-20}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-}
+      MLFLOW_TRACKING_USERNAME: ${MLFLOW_TRACKING_USERNAME:-}
+      MLFLOW_TRACKING_PASSWORD: ${MLFLOW_TRACKING_PASSWORD:-}
+      MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME:-sentiment-classifier}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s

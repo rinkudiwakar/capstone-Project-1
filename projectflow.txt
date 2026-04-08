@@ -135,7 +135,7 @@ kubectl get namespaces
 46. Verify the deployment:
 kubectl get pods
 kubectl get svc
-
+kubectl
 47. Deploy the app on EKS via CICD pipeline 
   >> edit ci.yaml, deployment.yaml, dockerfile
   >> Also edit the security group for nodes and edit inbound rule for 5000 port
@@ -180,7 +180,7 @@ global:
 scrape_configs:
   - job_name: "flask-app"
     static_configs:
-      - targets: ["a6bf6255d5f61470c9782b8955c98271-1409247973.us-east-1.elb.amazonaws.com:5000"]  # Replace with your app's External IP
+      - targets: ["af69a0b06997140f38f60ffdcde1fe22-702165716.eu-north-1.elb.amazonaws.com:5000"]  # Replace with your app's External IP
 
 
 
@@ -207,10 +207,11 @@ ssh -i your-key.pem ubuntu@your-ec2-public-ip
 60. Update and upgrade system packages:
 sudo apt update && sudo apt upgrade -y
 
-61. Download Grafana: wget https://dl.grafana.com/oss/release/grafana_10.1.5_amd64.deb
+61. Download Grafana: wget https://dl.grafana.com/oss/release/grafana_11.1.0_amd64.deb
 (this is a stable version for now; adjust the link if necessary.)
 
-62. Install Grafana: sudo apt install ./grafana_10.1.5_amd64.deb -y
+62. Install Grafana: sudo apt install ./grafana_11.1.0_amd64.deb -y
+
 
 63. Start the Grafana service: sudo systemctl start grafana-server
 
@@ -220,7 +221,7 @@ sudo apt update && sudo apt upgrade -y
 
 66. Open Grafana web UI: http://<ec2-public-ip>:3000 (username/pass - admin)
 
-67. Add Prometheus as a Data Source: http://54.81.71.206/:9090
+67. Add Prometheus as a Data Source: http://13.60.43.140:9090/
     click - Save and Test | Get started with building dashboards.
 
 

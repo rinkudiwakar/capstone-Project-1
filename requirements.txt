@@ -1,11 +1,8 @@
 # Install the local package so `src` can be imported.
 -e .
 
-# Core CLI script
 click
 python-dotenv
-
-# Notebook and experiment workflow
 jupyter
 ipykernel
 numpy
@@ -18,6 +15,5 @@ mlflow
 dagshub
 boto3
 
-# Project tooling currently present in the repo
 Sphinx
 flake8

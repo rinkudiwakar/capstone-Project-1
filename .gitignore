@@ -92,3 +92,23 @@ target/
 .mypy_cache/
 
 notebooks/
+
+# React / Node dependencies
+node_modules/
+npm-debug.log
+npm-error.log
+yarn-debug.log
+yarn-error.log
+
+# React build
+build/
+dist/
+
+# React environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ESLint cache
+.eslintcache

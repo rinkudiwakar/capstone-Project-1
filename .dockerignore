@@ -1,0 +1,64 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.coverage
+dist
+build
+*.egg
+
+# Node
+node_modules
+flask_app/react_app/node_modules
+npm-debug.log
+yarn-error.log
+.npm
+
+# Flask
+instance/
+.webassets-cache
+*.db
+
+# Environment
+.env
+.env.example
+flask_app/.env
+.env.local
+.venv
+venv/
+env/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Build artifacts
+flask_app/react_app/build
+flask_app/react_app/.cache
+mlruns/
+.dvc
+data/
+logs/
+models/
+notebooks/
+reports/
+supabase/
+tests/
+
+# Test
+.pytest_cache
+htmlcov/
+
+# Misc
+*.log
+.coverage

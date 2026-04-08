@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from pathlib import Path
 
@@ -8,7 +9,7 @@ import yaml
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 from src.constants.model_constants import get_mlflow_model_config
-from src.model.mlflow_config import configure_mlflow
+from src.model.mlflow_config import REQUIRED_MLFLOW_ENV_VARS, configure_mlflow
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,7 @@ def load_params(params_path: Path) -> dict:
         return yaml.safe_load(file) or {}
 
 
+@unittest.skipUnless(all(os.getenv(name) for name in REQUIRED_MLFLOW_ENV_VARS), "MLflow credentials are not configured for integration tests.")
 class TestModelLoading(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -54,15 +56,15 @@ class TestModelLoading(unittest.TestCase):
         self.assertTrue(str(self.model_version).strip())
 
     def test_model_predicts_holdout_rows(self):
-        X_holdout = self.holdout_data.iloc[:, 0:-1]
-        predictions = self.model.predict(X_holdout)
-        self.assertEqual(len(predictions), len(X_holdout))
+        x_holdout = self.holdout_data.iloc[:, 0:-1]
+        predictions = self.model.predict(x_holdout)
+        self.assertEqual(len(predictions), len(x_holdout))
 
     def test_model_performance(self):
-        X_holdout = self.holdout_data.iloc[:, 0:-1]
+        x_holdout = self.holdout_data.iloc[:, 0:-1]
         y_holdout = self.holdout_data.iloc[:, -1]
 
-        y_pred = self.model.predict(X_holdout)
+        y_pred = self.model.predict(x_holdout)
         accuracy = accuracy_score(y_holdout, y_pred)
         precision = precision_score(y_holdout, y_pred)
         recall = recall_score(y_holdout, y_pred)

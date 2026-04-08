@@ -1,49 +1,152 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-app
+  name: moviesentiment
+  namespace: default
   labels:
-    app: flask-app
+    app: moviesentiment
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
-      app: flask-app
+      app: moviesentiment
   template:
     metadata:
       labels:
-        app: flask-app
+        app: moviesentiment
     spec:
       containers:
-      - name: capstone-app
-        image: 033040503691.dkr.ecr.eu-north-1.amazonaws.com/capstone-app:latest
-        ports:
-        - containerPort: 5000
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "1"
-        env:
-        - name: MLFLOW_TRACKING_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: mlflow-secrets
-              key: MLFLOW_TRACKING_PASSWORD
-
+        - name: moviesentiment
+          image: 033040503691.dkr.ecr.eu-north-1.amazonaws.com/capstone-app:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: PORT
+              value: "5000"
+            - name: FLASK_APP_LOAD_DOTENV
+              value: "false"
+            - name: FLASK_APP_EAGER_STARTUP
+              value: "true"
+            - name: FLASK_APP_PRELOAD_MOVIES
+              value: "true"
+            - name: WATCHMODE_REGION
+              value: "US"
+            - name: MOVIE_CATALOG_LIMIT
+              value: "20"
+            - name: MLFLOW_MODEL_NAME
+              value: "sentiment-classifier"
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MLFLOW_TRACKING_URI
+            - name: MLFLOW_TRACKING_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MLFLOW_TRACKING_USERNAME
+            - name: MLFLOW_TRACKING_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MLFLOW_TRACKING_PASSWORD
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_DEFAULT_REGION
+              value: "eu-north-1"
+            - name: WATCHMODE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: WATCHMODE_API_KEY
+            - name: SUPABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SUPABASE_URL
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SUPABASE_SERVICE_ROLE_KEY
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: http
+            failureThreshold: 24
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1500m"
+              memory: "2Gi"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: flask-app-service
+  name: moviesentiment-service
+  namespace: default
+  labels:
+    app: moviesentiment
 spec:
-  type: LoadBalancer
   selector:
-    app: flask-app
+    app: moviesentiment
   ports:
     - name: http
-      protocol: TCP
-      port: 5000
-      targetPort: 5000
+      port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: moviesentiment
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: moviesentiment
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

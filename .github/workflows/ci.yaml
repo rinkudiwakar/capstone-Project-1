@@ -1,105 +1,270 @@
-name: CI Pipeline
+name: CI/CD Pipeline - MovieSentiment
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: moviesentiment-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: eu-north-1
+  EKS_CLUSTER_NAME: flask-app-cluster
+  PYTHON_VERSION: "3.10"
+  NODE_VERSION: "20"
+  IMAGE_NAME: moviesentiment
 
 jobs:
-  project-testing:
+  flask-app-tests:
+    name: Flask App Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FLASK_APP_LOAD_DOTENV: "false"
+      WATCHMODE_API_KEY: dummy-watchmode-key
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: service-role-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-flask-${{ hashFiles('requirements.txt', 'flask_app/requirements.txt') }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r flask_app/requirements.txt
+      - name: Run Flask app tests
+        run: python -m unittest tests/test_flask_app.py -v
+
+  frontend-build:
+    name: Frontend Build
+    needs: flask-app-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: flask_app/react_app/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: flask_app/react_app
+      - name: Build frontend
+        run: npm run build
+        working-directory: flask_app/react_app
+
+  build-docker-image:
+    name: Build Docker Image
+    needs: frontend-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp/image.tar
+          retention-days: 1
+
+  data-pipeline:
+    name: Data Pipeline
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
       MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
       MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: eu-north-1
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'flask_app/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
+          key: ${{ runner.os }}-pip-data-${{ hashFiles('requirements.txt') }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r flask_app/requirements.txt
           pip install "dvc[s3]"
+      - name: Configure AWS credentials for DVC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Run DVC pipeline
+        run: dvc repro
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dvc-artifacts
+          path: |
+            data/
+            models/
+            reports/
 
-      - name: Run pipeline
+  model-tests:
+    name: Model Tests
+    if: github.event_name == 'push'
+    needs: data-pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-model-${{ hashFiles('requirements.txt') }}
+      - name: Install dependencies
         run: |
-          dvc repro
-
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: dvc-artifacts
       - name: Run model tests
-        if: success()
+        run: python -m unittest tests/test_model.py -v
+
+  promote-model:
+    name: Promote Model
+    if: github.event_name == 'push'
+    needs: model-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-promote-${{ hashFiles('requirements.txt') }}
+      - name: Install dependencies
         run: |
-          python -m unittest tests/test_model.py
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Promote model
+        run: python scripts/promote_model.py
 
-      - name: Promote model to production
-        if: success()
+  push-to-ecr:
+    name: Push to ECR
+    if: github.event_name == 'push'
+    needs:
+      - build-docker-image
+      - promote-model
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      image_uri: ${{ steps.image-meta.outputs.image_uri }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp
+      - name: Load Docker image
+        run: docker load --input /tmp/image.tar
+      - id: image-meta
+        name: Define image URI
         run: |
-          python scripts/promote_model.py
-
-      - name: Run Flask app tests
-        if: success()
+          echo "image_uri=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Tag Docker image for ECR
         run: |
-          python -m unittest tests/test_flask_app.py
-
-      - name: Login to AWS ECR
-        if: success()
-        run: |
-          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws configure set region ${{ secrets.AWS_REGION }}
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-
-      - name: Build Docker image
-        run: |
-          docker build -t ${{ secrets.ECR_REPOSITORY }}:latest .
-
-      - name: Tag Docker image
-        run: |
-          docker tag ${{ secrets.ECR_REPOSITORY }}:latest \
-          ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
-
-      - name: Check Docker Authentication
-        run: docker info
-
+          docker tag ${{ env.IMAGE_NAME }}:ci ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+          docker tag ${{ env.IMAGE_NAME }}:ci ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
       - name: Push Docker image to ECR
         run: |
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
 
-      - name: Set Up kubectl
-        uses: azure/setup-kubectl@v3
+  deploy-to-eks:
+    name: Deploy to EKS
+    if: github.event_name == 'push'
+    needs: push-to-ecr
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          version: 'latest'
-      
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: azure/setup-kubectl@v4
       - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+      - name: Create or update app secrets
         run: |
-          aws eks update-kubeconfig --region eu-north-1 --name flask-app-cluster
-
-      - name: Create Kubernetes Secret
-        run: |
-          kubectl create secret generic mlflow-secrets \
-            --from-literal=MLFLOW_TRACKING_PASSWORD=${{ secrets.MLFLOW_TRACKING_PASSWORD }} --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Deploy to EKS
-        run: |
-          kubectl apply -f deployment.yaml
+          kubectl create secret generic app-secrets \
+            --from-literal=MLFLOW_TRACKING_URI='${{ secrets.MLFLOW_TRACKING_URI }}' \
+            --from-literal=MLFLOW_TRACKING_USERNAME='${{ secrets.MLFLOW_TRACKING_USERNAME }}' \
+            --from-literal=MLFLOW_TRACKING_PASSWORD='${{ secrets.MLFLOW_TRACKING_PASSWORD }}' \
+            --from-literal=AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
+            --from-literal=AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
+            --from-literal=WATCHMODE_API_KEY='${{ secrets.WATCHMODE_API_KEY }}' \
+            --from-literal=SUPABASE_URL='${{ secrets.SUPABASE_URL }}' \
+            --from-literal=SUPABASE_SERVICE_ROLE_KEY='${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Apply workload manifests
+        run: kubectl apply -f deployment.yaml
+      - name: Update deployment image
+        run: kubectl set image deployment/moviesentiment moviesentiment=${{ needs.push-to-ecr.outputs.image_uri }} -n default
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/moviesentiment -n default --timeout=8m
+      - name: Print deployment status
+        run: kubectl get deployment,pods,svc,hpa -n default
