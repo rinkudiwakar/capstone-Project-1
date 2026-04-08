@@ -201,7 +201,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      image_uri: ${{ steps.image-meta.outputs.image_uri }}
+      image_uri: ${{ steps.image_meta.outputs.image_uri }}
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -217,7 +217,7 @@ jobs:
           path: /tmp
       - name: Load Docker image
         run: docker load --input /tmp/image.tar
-      - id: image-meta
+      - id: image_meta
         name: Define image URI
         run: |
           echo "image_uri=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
@@ -238,6 +238,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      IMAGE_URI: ${{ needs.push-to-ecr.outputs.image_uri }}
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -262,8 +264,15 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
       - name: Apply workload manifests
         run: kubectl apply -f deployment.yaml
+      - name: Validate image URI
+        run: |
+          if [ -z "${IMAGE_URI}" ]; then
+            echo "IMAGE_URI is empty. Failing before kubectl set image."
+            exit 1
+          fi
+          echo "Deploying image: ${IMAGE_URI}"
       - name: Update deployment image
-        run: kubectl set image deployment/moviesentiment moviesentiment=${{ needs.push-to-ecr.outputs.image_uri }} -n default
+        run: kubectl set image deployment/moviesentiment moviesentiment=${IMAGE_URI} -n default
       - name: Wait for rollout
         run: kubectl rollout status deployment/moviesentiment -n default --timeout=8m
       - name: Print deployment status
