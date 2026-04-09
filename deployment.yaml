@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: moviesentiment
+  name: flask-app
   namespace: default
   labels:
-    app: moviesentiment
+    app: flask-app
 spec:
   replicas: 1
   progressDeadlineSeconds: 1800
@@ -15,14 +15,14 @@ spec:
       maxUnavailable: 1
   selector:
     matchLabels:
-      app: moviesentiment
+      app: flask-app
   template:
     metadata:
       labels:
-        app: moviesentiment
+        app: flask-app
     spec:
       containers:
-        - name: moviesentiment
+        - name: flask-app
           image: 033040503691.dkr.ecr.eu-north-1.amazonaws.com/capstone-app:latest
           imagePullPolicy: Always
           ports:
@@ -36,9 +36,9 @@ spec:
             - name: FLASK_APP_EAGER_STARTUP
               value: "true"
             - name: FLASK_APP_PRELOAD_MOVIES
-              value: "true"
+              value: "false"
             - name: WATCHMODE_REGION
-              value: "US"
+              value: "IN"
             - name: MOVIE_CATALOG_LIMIT
               value: "20"
             - name: MLFLOW_MODEL_NAME
@@ -111,22 +111,22 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: "250m"
-              memory: "768Mi"
+              cpu: "200m"
+              memory: "512Mi"
             limits:
-              cpu: "1500m"
-              memory: "2Gi"
+              cpu: "1000m"
+              memory: "1Gi"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: moviesentiment-service
+  name: flask-app-service
   namespace: default
   labels:
-    app: moviesentiment
+    app: flask-app
 spec:
   selector:
-    app: moviesentiment
+    app: flask-app
   ports:
     - name: http
       port: 80
@@ -136,15 +136,15 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: moviesentiment
+  name: flask-app-hpa
   namespace: default
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: moviesentiment
+    name: flask-app
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
