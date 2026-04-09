@@ -1,7 +1,16 @@
 import axios from 'axios';
 
-// API base URL - adjust based on your Flask server
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const resolveApiBaseUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return 'http://localhost:5000';
+};
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
