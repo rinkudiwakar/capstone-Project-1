@@ -3,8 +3,14 @@ name: CI/CD Pipeline - MovieSentiment
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - README.md
+      - projectflow.txt
   pull_request:
     branches: [main, master]
+    paths-ignore:
+      - README.md
+      - projectflow.txt
 
 concurrency:
   group: moviesentiment-${{ github.workflow }}-${{ github.ref }}

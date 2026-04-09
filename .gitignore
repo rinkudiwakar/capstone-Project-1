@@ -112,3 +112,6 @@ dist/
 
 # ESLint cache
 .eslintcache
+
+# Local notes
+projectflow.txt
